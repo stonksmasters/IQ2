@@ -3,7 +3,7 @@
 import asyncio
 import websockets
 import json
-from bluetooth_tracker import detect_bluetooth_signals
+from .bluetooth_tracker import detect_bluetooth_signals
 from wifi_tracker import detect_wifi_signals
 from flipper_zero_interface import detect_flipper_signals
 from utils.config import SERVER_URI
