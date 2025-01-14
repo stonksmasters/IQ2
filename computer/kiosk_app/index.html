@@ -3,13 +3,19 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Live Feed Kiosk</title>
+    <title>IQ2 Live Feed</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div id="video-container">
-        <video id="live-stream" autoplay></video>
+        <video id="live-stream" autoplay muted></video>
         <canvas id="hud-overlay"></canvas>
+    </div>
+    <div id="controls">
+        <h3>Signal Tracking Controls</h3>
+        <label><input type="checkbox" id="track-bluetooth" checked> Bluetooth</label>
+        <label><input type="checkbox" id="track-wifi" checked> Wi-Fi</label>
+        <label><input type="checkbox" id="track-flipper" checked> Flipper Zero</label>
     </div>
     <script src="main.js"></script>
     <script src="hud_overlay.js"></script>

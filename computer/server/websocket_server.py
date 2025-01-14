@@ -3,7 +3,7 @@
 import asyncio
 import websockets
 import json
-from triangulation import process_signals
+from .triangulation import process_signals
 from utils.logger import setup_logger
 
 logger = setup_logger('websocket_server', 'websocket_server.log')
