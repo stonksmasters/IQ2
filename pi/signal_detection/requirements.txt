@@ -1,0 +1,4 @@
+# pi/signal_detection/requirements.txt
+pyserial
+websockets
+asyncio

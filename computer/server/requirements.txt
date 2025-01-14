@@ -1,0 +1,5 @@
+# computer/server/requirements.txt
+websockets
+asyncio
+aiortc
+aiohttp

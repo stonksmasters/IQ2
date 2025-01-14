@@ -1,0 +1,4 @@
+# pi/camera_stream/requirements.txt
+aiortc
+aiohttp
+asyncio

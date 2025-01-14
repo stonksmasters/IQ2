@@ -1,10 +1,7 @@
 # computer/server/triangulation.py
-import math
 
-def triangulate(signals):
-    # Placeholder for triangulation logic
-    # Requires multiple signal sources and their positions
-    # Example: Simple averaging (replace with actual triangulation)
-    x = sum(signal['x'] for signal in signals) / len(signals)
-    y = sum(signal['y'] for signal in signals) / len(signals)
-    return x, y
+def process_signals(signal_data):
+    # Implement your triangulation logic here
+    # For demonstration, we're returning the received data
+    # Replace this with actual processing
+    return signal_data

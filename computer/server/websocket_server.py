@@ -1,27 +1,41 @@
 # computer/server/websocket_server.py
+
 import asyncio
 import websockets
 import json
+from triangulation import process_signals
+from utils.logger import setup_logger
 
-connected = set()
+logger = setup_logger('websocket_server', 'websocket_server.log')
 
-async def signals_handler(websocket, path):
-    connected.add(websocket)
+connected_clients = set()
+
+async def handle_client(websocket, path):
+    logger.info(f"Client connected: {websocket.remote_address}")
+    connected_clients.add(websocket)
     try:
         async for message in websocket:
-            signal_data = json.loads(message)
-            # Process signal data (e.g., triangulation)
-            processed_data = process_signals(signal_data)
-            # Broadcast to all connected frontend clients
+            data = json.loads(message)
+            logger.info(f"Received signal data: {data}")
+            processed_data = process_signals(data)
+            # Broadcast processed data to all connected frontend clients
             await broadcast(json.dumps(processed_data))
+    except websockets.exceptions.ConnectionClosed:
+        logger.info(f"Client disconnected: {websocket.remote_address}")
     finally:
-        connected.remove(websocket)
+        connected_clients.remove(websocket)
 
 async def broadcast(message):
-    if connected:  # asyncio.wait doesn't accept an empty list
-        await asyncio.wait([ws.send(message) for ws in connected])
+    if connected_clients:
+        await asyncio.wait([client.send(message) for client in connected_clients])
 
-start_server = websockets.serve(signals_handler, "0.0.0.0", 8765)
+async def start_websocket_server():
+    server = await websockets.serve(handle_client, "0.0.0.0", 8765)
+    logger.info("WebSocket server started on port 8765")
+    await server.wait_closed()
 
-asyncio.get_event_loop().run_until_complete(start_server)
-asyncio.get_event_loop().run_forever()
+if __name__ == "__main__":
+    try:
+        asyncio.run(start_websocket_server())
+    except KeyboardInterrupt:
+        logger.info("WebSocket server stopped.")
