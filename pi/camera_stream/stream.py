@@ -1,59 +1,83 @@
 # pi/camera_stream/stream.py
 
 import asyncio
-from aiortc import RTCPeerConnection, VideoStreamTrack
-from aiortc.contrib.media import MediaBlackhole, MediaRelay
 import cv2
-import numpy as np
+from aiohttp import web
 
-relay = MediaRelay()
+# Global variable to hold the latest frame
+latest_frame = None
 
-class VideoTransformTrack(VideoStreamTrack):
-    def __init__(self, track):
-        super().__init__()  # Initialize base class
-        self.track = track
+# Initialize the camera
+cap = cv2.VideoCapture(0)
 
-    async def recv(self):
-        frame = await self.track.recv()
-        # Here you can apply transformations to the frame if needed
-        return frame
+if not cap.isOpened():
+    raise RuntimeError("Cannot open camera")
 
-async def run(pc, signaling):
-    @pc.on("datachannel")
-    def on_datachannel(channel):
-        @channel.on("message")
-        async def on_message(message):
-            print(f"Received message from client: {message}")
-            # Implement HUD control commands here
-            # For example, adjust which signals to track based on message
+async def video_stream(request):
+    global latest_frame
 
-    # Assuming signaling is handled elsewhere
-    await signaling.connect()
+    async def stream():
+        while True:
+            if latest_frame is None:
+                await asyncio.sleep(0.1)
+                continue
 
-    # Add video track
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Cannot open camera")
-        return
+            # Encode frame as JPEG
+            ret, jpeg = cv2.imencode('.jpg', latest_frame)
+            if not ret:
+                continue
 
+            # Convert to bytes
+            frame_bytes = jpeg.tobytes()
+
+            # Yield multipart data
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            await asyncio.sleep(0.03)  # Approx ~30fps
+
+    return web.Response(body=stream(), content_type='multipart/x-mixed-replace; boundary=frame')
+
+async def capture_frames():
+    global latest_frame
     while True:
         ret, frame = cap.read()
         if not ret:
-            print("Cannot receive frame (stream end?). Exiting ...")
-            break
-        # Convert the image to RGB
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        # Convert to aiortc VideoFrame
-        video_frame = VideoStreamTrack.from_ndarray(frame, format="rgb24")
-        await pc.addTrack(video_frame)
+            print("Failed to grab frame")
+            await asyncio.sleep(0.1)
+            continue
+
+        # Optional: Apply any frame transformations here
+        # For example, convert to RGB
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+        latest_frame = frame
         await asyncio.sleep(0.03)  # Approx ~30fps
 
+async def init_app():
+    app = web.Application()
+    app.router.add_get('/video_feed', video_stream)
+    return app
+
 async def main():
-    pc = RTCPeerConnection()
-    await run(pc, None)
+    # Start frame capture
+    frame_task = asyncio.create_task(capture_frames())
+
+    # Initialize and run the web server
+    app = await init_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, '0.0.0.0', 8000)
+    await site.start()
+
+    print("Video streaming server started at http://0.0.0.0:8000/video_feed")
+
+    # Keep the main coroutine running
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("Video streaming stopped.")
+    finally:
+        cap.release()
