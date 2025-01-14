@@ -1,29 +1,17 @@
 # pi/signal_detection/signal_detection.py
 
 import asyncio
-import websockets
-import json
-from .bluetooth_tracker import detect_bluetooth_signals
-from .wifi_tracker import detect_wifi_signals
-from .flipper_zero_interface import detect_flipper_signals
-from utils.config import SERVER_URI
+from bluetooth_tracker import detect_bluetooth_signals
+from wifi_tracker import detect_wifi_signals
 
 async def send_signals():
-    async with websockets.connect(SERVER_URI) as websocket:
-        while True:
-            bluetooth = detect_bluetooth_signals()
-            wifi = detect_wifi_signals()
-            flipper = detect_flipper_signals()
-            all_signals = {
-                "bluetooth": bluetooth,
-                "wifi": wifi,
-                "flipper": flipper,
-            }
-            await websocket.send(json.dumps(all_signals))
-            await asyncio.sleep(0.1)  # Adjust the frequency as needed
+    while True:
+        bluetooth_signals = await detect_bluetooth_signals()
+        wifi_signals = await detect_wifi_signals()
 
-if __name__ == "__main__":
-    try:
-        asyncio.run(send_signals())
-    except KeyboardInterrupt:
-        print("Signal detection stopped.")
+        # Process and send signals as needed
+        # For example, send to a remote server or update a shared resource
+        print("Bluetooth Signals:", bluetooth_signals)
+        print("WiFi Signals:", wifi_signals)
+
+        await asyncio.sleep(5)  # Adjust the interval as needed

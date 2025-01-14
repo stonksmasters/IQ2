@@ -1,83 +1,93 @@
-# pi/camera_stream/stream.py
-
-import asyncio
+from flask import Flask, Response
+from picamera2 import Picamera2
 import cv2
-from aiohttp import web
+import threading
+import time
+import sys
 
-# Global variable to hold the latest frame
+app = Flask(__name__)
+
+# Initialize Picamera2
+picam2 = Picamera2()
+picam2.start()
+
+# Shared variable for the latest frame
 latest_frame = None
+lock = threading.Lock()
 
-# Initialize the camera
-cap = cv2.VideoCapture(0)
-
-if not cap.isOpened():
-    raise RuntimeError("Cannot open camera")
-
-async def video_stream(request):
-    global latest_frame
-
-    async def stream():
-        while True:
-            if latest_frame is None:
-                await asyncio.sleep(0.1)
-                continue
-
-            # Encode frame as JPEG
-            ret, jpeg = cv2.imencode('.jpg', latest_frame)
-            if not ret:
-                continue
-
-            # Convert to bytes
-            frame_bytes = jpeg.tobytes()
-
-            # Yield multipart data
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-            await asyncio.sleep(0.03)  # Approx ~30fps
-
-    return web.Response(body=stream(), content_type='multipart/x-mixed-replace; boundary=frame')
-
-async def capture_frames():
+def capture_frames():
     global latest_frame
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Failed to grab frame")
-            await asyncio.sleep(0.1)
-            continue
+        try:
+            # Capture frame as a numpy array
+            frame = picam2.capture_array()
 
-        # Optional: Apply any frame transformations here
-        # For example, convert to RGB
-        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            # Add timestamp overlay (optional)
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+            cv2.putText(frame, timestamp, (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
-        latest_frame = frame
-        await asyncio.sleep(0.03)  # Approx ~30fps
+            # Encode the frame as JPEG
+            ret, jpeg = cv2.imencode('.jpg', frame)
+            if ret:
+                with lock:
+                    latest_frame = jpeg.tobytes()
 
-async def init_app():
-    app = web.Application()
-    app.router.add_get('/video_feed', video_stream)
-    return app
+            # Display the frame locally
+            cv2.imshow('Live Stream', frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
 
-async def main():
-    # Start frame capture
-    frame_task = asyncio.create_task(capture_frames())
+            # Control frame rate (e.g., ~30 FPS)
+            time.sleep(1/30)
+        except KeyboardInterrupt:
+            break
 
-    # Initialize and run the web server
-    app = await init_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, '0.0.0.0', 8000)
-    await site.start()
+    # Clean up
+    picam2.stop()
+    cv2.destroyAllWindows()
+    sys.exit()
 
-    print("Video streaming server started at http://0.0.0.0:8000/video_feed")
+def generate():
+    global latest_frame
+    while True:
+        with lock:
+            if latest_frame is None:
+                continue
+            frame = latest_frame
 
-    # Keep the main coroutine running
-    await asyncio.Event().wait()
+        # Yield frame in byte format as part of the MJPEG stream
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
 
-if __name__ == "__main__":
+@app.route('/video_feed')
+def video_feed():
+    return Response(generate(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/')
+def index():
+    # Simple HTML page to display the video stream
+    return '''
+    <html>
+    <head>
+        <title>Raspberry Pi Camera Stream</title>
+    </head>
+    <body>
+        <h1>Raspberry Pi Camera Stream</h1>
+        <img src="/video_feed" width="640" height="480">
+    </body>
+    </html>
+    '''
+
+if __name__ == '__main__':
+    # Start frame capture in a separate thread
+    t = threading.Thread(target=capture_frames)
+    t.daemon = True
+    t.start()
+
+    # Run Flask app
     try:
-        asyncio.run(main())
+        app.run(host='0.0.0.0', port=8000, threaded=True)
     except KeyboardInterrupt:
-        print("Video streaming stopped.")
-    finally:
-        cap.release()
+        pass

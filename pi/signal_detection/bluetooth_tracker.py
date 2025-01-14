@@ -1,14 +1,23 @@
 # pi/signal_detection/bluetooth_tracker.py
+
+import asyncio
 from bluepy.btle import Scanner
 
-def detect_bluetooth_signals():
+async def detect_bluetooth_signals():
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, scan_bluetooth)
+
+def scan_bluetooth():
     scanner = Scanner()
-    devices = scanner.scan(10.0)
-    signals = []
+    devices = scanner.scan(10.0)  # Scan for 10 seconds
+
+    # Process devices as needed
+    signal_data = []
     for dev in devices:
-        signals.append({
-            "mac": dev.addr,
-            "rssi": dev.rssi,
-            # Add more details as needed
+        signal_data.append({
+            'address': dev.addr,
+            'rssi': dev.rssi,
+            'services': [s.uuid for s in dev.getScanData()]
         })
-    return signals
+
+    return signal_data
